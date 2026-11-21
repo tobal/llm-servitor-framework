@@ -1,0 +1,13 @@
+[Unit]
+Description=Servitor Daemon Host Service for %i (Cyber-Táltos Local AI Agent)
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/env python3 %h/.local/bin/servitor_cli.py daemon -s %i --interval 3
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
