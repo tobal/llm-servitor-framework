@@ -812,17 +812,31 @@ def load_servitor_context(servitor_name: str, context_dir: Optional[Path] = None
     context_blocks = []
     ingested_file_names = set()
 
-    # 1. Kronos Root Common Knowledge
+    # 0. Root Servitors Common Knowledge (~/.lsf/servitors/common/)
+    root_common = SERVITORS_DIR / "common"
+    if root_common.exists():
+        for file_path in sorted(root_common.glob("*.md")) + sorted(root_common.glob("*.txt")):
+            if file_path.name not in ingested_file_names:
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        file_content = f.read()
+                        context_blocks.append(f"--- ROOT COMMON KNOWLEDGE: {file_path.name} ---\n{file_content}\n")
+                        ingested_file_names.add(file_path.name)
+                except Exception as e:
+                    print(f"Warning: Failed to read root common file: {str(e)}", file=sys.stderr)
+
+    # 1. Kronos Root Common Knowledge (~/.lsf/servitors/kronos/common/)
     kronos_common = SERVITORS_DIR / "kronos" / "common"
     if kronos_common.exists():
         for file_path in sorted(kronos_common.glob("*.md")) + sorted(kronos_common.glob("*.txt")):
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    context_blocks.append(f"--- KRONOS COMMON KNOWLEDGE: {file_path.name} ---\n{content}\n")
-                    ingested_file_names.add(file_path.name)
-            except Exception as e:
-                print(f"Warning: Failed to read common file: {str(e)}", file=sys.stderr)
+            if file_path.name not in ingested_file_names:
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        file_content = f.read()
+                        context_blocks.append(f"--- KRONOS COMMON KNOWLEDGE: {file_path.name} ---\n{file_content}\n")
+                        ingested_file_names.add(file_path.name)
+                except Exception as e:
+                    print(f"Warning: Failed to read kronos common file: {str(e)}", file=sys.stderr)
 
     # 2. Archon Common Knowledge (if applicable)
     profile = SERVITOR_PROFILES.get(s_name, {})
