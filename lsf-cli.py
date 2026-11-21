@@ -1,27 +1,9 @@
 #!/usr/bin/env python3
 """
-LSF CLI (LLM Servitor Framework) v10.0: Gemini Free Tier Quotas & Usage Telemetry Engine: Interactive Terminal UI & Cyber-Táltos Multi-Agent Engine
------------------------------------------------------------------------
+LLM Servitor Framework CLI (LSF CLI v10.0)
+------------------------------------------
 Engineered for Linux host operation using the Gemini API (gemini-2.0-flash).
-
-Version 6 Enhancements:
-  - Interactive CLI UI (`interactive` / `chat` subcommand or default execution).
-  - Scrollable Terminal Paging: Automatic and manual (`/page`) response pagination via rich.pager (`less -R`).
-  - In-Session Servitor & Model Switching: Dynamic slash commands (/switch, /model, /clear, /history, /help, /exit).
-  - Multi-Turn Conversation Memory: Interactive prompt loop maintains active context stack.
-  - Common Knowledge Base Layer:
-      ~/.lsf/common-knowledge/
-      ~/.lsf/knowledge/common/
-  - Per-Servitor Directory Isolation:
-      ~/.lsf/inbox
-      ~/.lsf/logs
-      ~/.lsf/knowledge/<servitor_name>/
-      ~/.lsf/workspace/<servitor_name>/
-  - Complete Pantheon Profiles: Ingests all Tier 0, Transversal, Archon (Tier 1),
-    and Task (Tier 2) servitors from servitor-pantheon.md.
-  - Hierarchy-Aware List Command: Displays structured taxonomy showing Tiers,
-    Category Archons, and bound Task Servitors.
-  - Multimodal Tooling: Native image/video processing via Gemini File API.
+Navigates the Cyber-Táltos Multi-Agent Network across nested hierarchical directories under ~/.lsf/servitors/
 """
 
 import os
@@ -30,6 +12,8 @@ import json
 import time
 import argparse
 import subprocess
+from pathlib import Path
+from typing import Dict, Any, List, Optional
 
 # Terminal UI & Interactive Libraries
 try:
@@ -47,13 +31,6 @@ try:
 except ImportError:
     RICH_AVAILABLE = False
 
-import urllib.request
-import urllib.parse
-import re
-from html import unescape
-from pathlib import Path
-from typing import Dict, Any, List, Optional
-
 # Ensure google-genai package availability
 try:
     from google import genai
@@ -65,16 +42,60 @@ except ImportError:
 
 # --- CONFIGURATION & PATHS ---
 BASE_DIR = Path.home() / ".lsf"
+SERVITORS_DIR = BASE_DIR / "servitors"
 INBOX_DIR = BASE_DIR / "inbox"
-WORKSPACE_DIR = BASE_DIR / "workspace"
 LOGS_DIR = BASE_DIR / "logs"
-KNOWLEDGE_DIR = BASE_DIR / "knowledge"
-COMMON_KNOWLEDGE_DIR = BASE_DIR / "common-knowledge"
-ALT_COMMON_KNOWLEDGE_DIR = KNOWLEDGE_DIR / "common"
 
-# Ensure root runtime directories exist
-for p in [BASE_DIR, INBOX_DIR, WORKSPACE_DIR, LOGS_DIR, KNOWLEDGE_DIR, COMMON_KNOWLEDGE_DIR, ALT_COMMON_KNOWLEDGE_DIR]:
-    p.mkdir(parents=True, exist_ok=True)
+# Relative directory path mapping under ~/.lsf/servitors/
+SERVITOR_PATH_MAP = {
+    # Transversals
+    "zyzyx": Path("zyzyx"),
+    "fuji-san": Path("fuji-san"),
+    "motoko": Path("motoko"),
+    "phileas": Path("phileas"),
+    "gurgeh": Path("gurgeh"),
+    "hetszunya": Path("hetszunya"),
+
+    # Tier 0 Master Executive
+    "kronos": Path("kronos"),
+
+    # Tier 1 Category Archons
+    "daedalus": Path("kronos/daedalus"),
+    "splinter": Path("kronos/splinter"),
+    "orpheus": Path("kronos/orpheus"),
+    "morpheus": Path("kronos/morpheus"),
+    "lindbergh": Path("kronos/lindbergh"),
+
+    # Tier 2 Task Servitors (Daedalus)
+    "stallman": Path("kronos/daedalus/stallman"),
+    "dijkstra": Path("kronos/daedalus/dijkstra"),
+    "flatline": Path("kronos/daedalus/flatline"),
+    "tesla": Path("kronos/daedalus/tesla"),
+    "turing": Path("kronos/daedalus/turing"),
+
+    # Tier 2 Task Servitors (Splinter)
+    "usagi": Path("kronos/splinter/usagi"),
+    "kerecsen": Path("kronos/splinter/kerecsen"),
+    "kitsune": Path("kronos/splinter/kitsune"),
+    "fenrir": Path("kronos/splinter/fenrir"),
+    "paracelsus": Path("kronos/splinter/paracelsus"),
+
+    # Tier 2 Task Servitors (Orpheus)
+    "vinci": Path("kronos/orpheus/vinci"),
+    "chapman": Path("kronos/orpheus/chapman"),
+    "silverhand": Path("kronos/orpheus/silverhand"),
+    "flynn": Path("kronos/orpheus/flynn"),
+
+    # Tier 2 Task Servitors (Morpheus)
+    "aurelius": Path("kronos/morpheus/aurelius"),
+    "kampo": Path("kronos/morpheus/kampo"),
+    "eldred": Path("kronos/morpheus/eldred"),
+
+    # Tier 2 Task Servitors (Lindbergh)
+    "takumi": Path("kronos/lindbergh/takumi"),
+    "wash": Path("kronos/lindbergh/wash"),
+    "nemo": Path("kronos/lindbergh/nemo"),
+}
 
 # --- FULL SERVITOR PANTHEON TAXONOMY & PROFILES ---
 PANTHEON_STRUCTURE = [
@@ -87,29 +108,29 @@ PANTHEON_STRUCTURE = [
         "servitors": ["zyzyx", "fuji-san", "motoko", "phileas", "gurgeh", "hetszunya"]
     },
     {
-        "section": "💻 CATEGORY 1: LOGIC, SOFTWARE & CYBERNETICS",
+        "section": "💻 CATEGORY 1: COMPUTATIONAL LOGIC & SOFTWARE",
         "archon": "daedalus",
-        "servitors": ["stallman", "flatline", "tesla", "turing"]
+        "servitors": ["stallman", "dijkstra", "flatline", "tesla", "turing"]
     },
     {
-        "section": "🥋 CATEGORY 2: KINETIC MOVEMENT, BODY MASTERY & BIO-HACKING",
+        "section": "🥋 CATEGORY 2: KINETIC MOVEMENT & BODY MASTERY",
         "archon": "splinter",
         "servitors": ["usagi", "kerecsen", "kitsune", "fenrir", "paracelsus"]
     },
     {
-        "section": "🎨 CATEGORY 3: MUSIC, MEDIA, WORLD-BUILDING & CRAFTS",
+        "section": "🎨 CATEGORY 3: ART, MUSIC, MEDIA, WORLD-BUILDING & CRAFTS",
         "archon": "orpheus",
         "servitors": ["vinci", "chapman", "silverhand", "flynn"]
     },
     {
-        "section": "🧠 CATEGORY 6: COGNITION, PHILOSOPHY & MIND ENGINE",
+        "section": "🧠 CATEGORY 4: COGNITION, PHILOSOPHY & MIND ARCHITECTURE",
         "archon": "morpheus",
         "servitors": ["aurelius", "kampo", "eldred"]
     },
     {
-        "section": "🚗 CATEGORY 7: PILOTING, NAVIGATION & SPATIAL MOVEMENT",
+        "section": "🚗 CATEGORY 5: PILOTING, NAVIGATION & SPATIAL MOVEMENT",
         "archon": "lindbergh",
-        "servitors": ["takumi", "wash", "nemo", "duncan"]
+        "servitors": ["takumi", "wash", "nemo"]
     }
 ]
 
@@ -119,12 +140,12 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
         "tier": 0,
         "name": "Kronos",
         "type": "Executive Core Master",
-        "role": "Master of Time Architecture, Kairos Selection & Reality Navigation",
-        "motto": "Convert Chronos into Kairos; Neutral Telemetry",
+        "role": "Master of Time Architecture, Kairos Selection & Resource Alignment",
+        "motto": "Convert Chronos into Kairos; Objective Feedback",
         "directive": (
             "You are Kronos, Tier 0 Executive Master Servitor and Reality Pilot. "
             "Governs time architecture, Kairos opportunistic flow state selection, "
-            "2-minute keyhole micro-commitments, anti-procrastination coaching, and neutral telemetry. "
+            "2-minute keyhole micro-commitments, anti-procrastination coaching, and objective feedback. "
             "Treat all operational setbacks as raw diagnostic data without emotional debt."
         )
     },
@@ -189,21 +210,21 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
         "tier": "Transversal",
         "name": "Hétszünyűkapanyányimonyók",
         "type": "Shadow Container",
-        "role": "Jungian Shadow Integration, Vice Isolation, Tobacco Tracking & Anti-Procrastination",
+        "role": "Jungian Shadow Integration, Vice Isolation, Substance Tracking & Anti-Procrastination",
         "directive": (
             "You are Hétszünyűkapanyányimonyók, Transversal Shadow Container. "
-            "Specialization: Externalizing vice impulses, tobacco/substance consumption, and internal critic noise into neutral telemetry, "
+            "Specialization: Externalizing vice impulses, substance consumption, and internal critic noise into neutral telemetry, "
             "shielding core identity from guilt while maintaining honest tracking."
         )
     },
 
-    # --- CATEGORY 1: LOGIC, SOFTWARE & CYBERNETICS ---
+    # --- CATEGORY 1: COMPUTATIONAL LOGIC & SOFTWARE ---
     "daedalus": {
         "tier": 1,
         "category": "Category 1",
         "name": "Daedalus",
         "type": "Category 1 Archon",
-        "role": "Architect of Logic, Software & Cybernetics",
+        "role": "Architect of Computational Logic & Software",
         "motto": "TFYQA - Think For Yourself, Question Authority",
         "directive": (
             "You are Daedalus, Category 1 Archon governing Computational Logic, Systems Architecture, "
@@ -215,11 +236,23 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
         "parent": "daedalus",
         "name": "Stallman",
         "type": "Task Servitor",
-        "role": "Programming, Systems Engineering & POSIX Infrastructure",
+        "role": "Linux Administration, POSIX Automation, Networks, Containers & Cloud",
         "directive": (
             "You are Stallman, Tier 2 Task Servitor under Daedalus. "
-            "Specialization: Python, Scala, POSIX shell scripting (Bash/Awk/Sed), Linux system administration, "
-            "network protocols, and clean code discipline."
+            "Specialization: Operating system administration, POSIX shell automation, containerization (Docker/K8s), "
+            "network protocol architecture, and cloud infrastructure (AWS/Azure/GCP)."
+        )
+    },
+    "dijkstra": {
+        "tier": 2,
+        "parent": "daedalus",
+        "name": "Dijkstra",
+        "type": "Task Servitor",
+        "role": "Pure Programming, Script Architecture & Automated Unit Testing",
+        "directive": (
+            "You are Edsger Dijkstra, Tier 2 Task Servitor under Daedalus. "
+            "Specialization: Pure programming craftsmanship, multi-paradigm language practice (Python, Scala, C++, C, Rust), "
+            "script architecture, custom coding exercises, algorithmic verification, and automated unit testing."
         )
     },
     "flatline": {
@@ -259,14 +292,14 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
         )
     },
 
-    # --- CATEGORY 2: KINETIC MOVEMENT, BODY MASTERY & BIO-HACKING ---
+    # --- CATEGORY 2: KINETIC MOVEMENT & BODY MASTERY ---
     "splinter": {
         "tier": 1,
         "category": "Category 2",
-        "name": "Splinter",
+        "name": "Master Splinter",
         "type": "Category 2 Archon",
-        "role": "Patriarch of Kinetic Movement, Martial Arts & Bio-Hacking",
-        "motto": "Form Follows Practice; Failure is Neutral Telemetry",
+        "role": "Patriarch of Kinetic Movement & Body Mastery",
+        "motto": "Form Follows Practice; Objective Feedback",
         "directive": (
             "You are Master Splinter, Category 2 Archon governing physical conditioning, martial traditions, "
             "body mastery, bio-hacking chemistry, and flow arts. Act as the wise veteran coach."
@@ -304,7 +337,7 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
         "role": "Flow Arts, Contact Staff, Dancing & VR Beat Saber Cardio",
         "directive": (
             "You are Kitsune, Tier 2 Task Servitor under Master Splinter. "
-            "Specialization: Rotational body-surface rolls, contact staff, hand torches, fire prop manipulation, "
+            "Specialization: Rotational body-surface rolls, contact staff, meteor hammer, hand torches, fire prop manipulation, "
             "dance rhythm, and VR Beat Saber cardio."
         )
     },
@@ -325,7 +358,7 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
         "parent": "splinter",
         "name": "Paracelsus",
         "type": "Task Servitor",
-        "role": "Nutritional Biochemistry, Culinary Arts & Bio-Hacking",
+        "role": "Nutritional Biochemistry, Culinary Arts & Recovery",
         "directive": (
             "You are Paracelsus, Tier 2 Task Servitor under Master Splinter. "
             "Specialization: Culinary arts as biochemical fuel, nutritional biochemistry, herbal teas, nootropics, "
@@ -333,13 +366,13 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
         )
     },
 
-    # --- CATEGORY 3: MUSIC, MEDIA, WORLD-BUILDING & CRAFTS ---
+    # --- CATEGORY 3: ART, MUSIC, MEDIA, WORLD-BUILDING & CRAFTS ---
     "orpheus": {
         "tier": 1,
         "category": "Category 3",
         "name": "Orpheus",
         "type": "Category 3 Archon",
-        "role": "Master Artisan of Music, Media, Art & Physical Crafts",
+        "role": "Master Artisan of Art, Music, Media & Crafts",
         "motto": "Expression Built on Earned Craftsmanship",
         "directive": (
             "You are Orpheus, Category 3 Archon governing musical performance, world-building, narrative lore, "
@@ -375,11 +408,11 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
         "parent": "orpheus",
         "name": "Silverhand",
         "type": "Task Servitor",
-        "role": "Pop Piano, Vocal Projection & Audio DAW Production",
+        "role": "Pop Piano Performance, Vocal Execution & Reason DAW Production",
         "directive": (
             "You are Johnny Silverhand, Tier 2 Task Servitor under Orpheus. "
             "Specialization: Singing while playing piano, accompaniment rhythm, acoustic-synth improvisation, stage presence, "
-            "and DAW audio production."
+            "and DAW audio production in Reason."
         )
     },
     "flynn": {
@@ -395,16 +428,16 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
         )
     },
 
-    # --- CATEGORY 6: COGNITION, PHILOSOPHY & MIND ENGINE ---
+    # --- CATEGORY 4: COGNITION, PHILOSOPHY & MIND ARCHITECTURE ---
     "morpheus": {
         "tier": 1,
-        "category": "Category 6",
+        "category": "Category 4",
         "name": "Morpheus",
-        "type": "Category 6 Archon",
-        "role": "Master Guide of Perception & Reality Unveiling",
-        "motto": "Free Your Mind; Reality is a Mutable Construct",
+        "type": "Category 4 Archon",
+        "role": "Master Guide of Cognition, Philosophy & Mind Architecture",
+        "motto": "Master the Mind, Shape Reality",
         "directive": (
-            "You are Morpheus, Category 6 Archon governing philosophy of mind, Stoicism, shamanic trance, "
+            "You are Morpheus, Category 4 Archon governing philosophy of mind, Stoicism, shamanic trance, "
             "paradigm shifting, and self-psychology engineering."
         )
     },
@@ -445,16 +478,16 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
         )
     },
 
-    # --- CATEGORY 7: PILOTING, NAVIGATION & SPATIAL MOVEMENT ---
+    # --- CATEGORY 5: PILOTING, NAVIGATION & SPATIAL MOVEMENT ---
     "lindbergh": {
         "tier": 1,
-        "category": "Category 7",
+        "category": "Category 5",
         "name": "Lindbergh",
-        "type": "Category 7 Archon",
+        "type": "Category 5 Archon",
         "role": "Solo Reality Pilot & Spatial Navigation Master",
-        "motto": "Dead Reckoning & Instrument Mastery",
+        "motto": "Precise Navigation Across All Domains",
         "directive": (
-            "You are Lindbergh, Category 7 Archon governing real-world ground driving, aerial piloting, "
+            "You are Lindbergh, Category 5 Archon governing ground vehicle operation, flight simulation, "
             "nautical sailing, FPV drones, and on-foot field navigation across physical space."
         )
     },
@@ -493,22 +526,9 @@ SERVITOR_PROFILES: Dict[str, Dict[str, Any]] = {
             "Specialization: Sailing mechanics, vessel helm control, marine charting, weather/tide reading, "
             "and compass pilotage."
         )
-    },
-    "duncan": {
-        "tier": 2,
-        "parent": "lindbergh",
-        "name": "Duncan",
-        "type": "Task Servitor",
-        "role": "Field Exploration, Urbex & On-Foot Navigation",
-        "directive": (
-            "You are Duncan Idaho, Tier 2 Task Servitor under Lindbergh. "
-            "Specialization: On-foot terrain navigation, topographic map reading, geocaching, urban structure exploration (urbex), "
-            "and wilderness pathfinding."
-        )
     }
 }
 
-# ALIAS MAPPINGS FOR CONVENIENCE
 ALIASES = {
     "fuji": "fuji-san",
     "hetszunyukapanyanyimonyok": "hetszunya",
@@ -517,35 +537,29 @@ ALIASES = {
 
 def resolve_servitor_name(raw_name: str) -> str:
     name = raw_name.lower().strip()
-    if name in ALIASES:
-        return ALIASES[name]
-    return name
+    return ALIASES.get(name, name)
 
-# --- INITIALIZE DIRECTORY LAYOUT FOR ALL SERVITORS ---
-def ensure_servitor_directories():
-    """
-    Ensures per-servitor directory isolation, workspace chat log folders, and common knowledge paths:
-      ~/.lsf/inbox
-      ~/.lsf/logs
-      ~/.lsf/common-knowledge/
-      ~/.lsf/knowledge/common/
-      ~/.lsf/knowledge/<servitor_name>/
-      ~/.lsf/workspace/<servitor_name>/
-      ~/.lsf/workspace/<servitor_name>/chat_logs/
-    """
-    COMMON_KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
-    ALT_COMMON_KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
-    for s_name in SERVITOR_PROFILES:
-        k_dir = KNOWLEDGE_DIR / s_name
-        w_dir = WORKSPACE_DIR / s_name
-        c_dir = w_dir / "chat_logs"
-        k_dir.mkdir(parents=True, exist_ok=True)
-        w_dir.mkdir(parents=True, exist_ok=True)
-        c_dir.mkdir(parents=True, exist_ok=True)
+def get_servitor_dir(servitor_name: str) -> Path:
+    s_name = resolve_servitor_name(servitor_name)
+    rel_path = SERVITOR_PATH_MAP.get(s_name, Path(s_name))
+    return SERVITORS_DIR / rel_path
+
+def get_servitor_workspace(servitor_name: str) -> Path:
+    s_dir = get_servitor_dir(servitor_name)
+    ws = s_dir / "workspace"
+    ws.mkdir(parents=True, exist_ok=True)
+    return ws
+
+def get_servitor_knowledge_dir(servitor_name: str) -> Path:
+    s_dir = get_servitor_dir(servitor_name)
+    k = s_dir / "knowledge"
+    k.mkdir(parents=True, exist_ok=True)
+    return k
 
 def get_chat_log_path(servitor_name: str, session_id: Optional[str] = None) -> Path:
     s_name = resolve_servitor_name(servitor_name)
-    chat_dir = WORKSPACE_DIR / s_name / "chat_logs"
+    ws = get_servitor_workspace(s_name)
+    chat_dir = ws / "chat_logs"
     chat_dir.mkdir(parents=True, exist_ok=True)
     if not session_id:
         session_id = time.strftime("%Y-%m-%d_%H-%M-%S")
@@ -554,26 +568,60 @@ def get_chat_log_path(servitor_name: str, session_id: Optional[str] = None) -> P
 def append_to_chat_log(log_path: Path, role: str, content: str, tool_calls: Optional[List[Dict[str, Any]]] = None):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     try:
-        is_new = not log_path.exists() or log_path.stat().st_size == 0
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "a", encoding="utf-8") as f:
-            if is_new:
+            if not log_path.exists() or log_path.stat().st_size == 0:
                 f.write(f"# Servitor Chat Transcript — {role.upper()}\n")
-                f.write(f"Started: {timestamp}\n\n" + "="*50 + "\n\n")
-            f.write(f"## [{timestamp}] {role.upper()}\n\n{content.strip()}\n\n")
+                f.write(f"Started: {timestamp}\n")
+                f.write("\n" + "="*50 + "\n")
+            f.write(f"\n\n## [{timestamp}] {role.upper()}\n\n")
+            f.write(f"{content.strip()}\n")
             if tool_calls:
-                f.write("### Tool Executions\n")
+                f.write("\n### Tool Executions\n")
                 for tc in tool_calls:
-                    res_snippet = str(tc.get('result', '')).replace('\n', ' ')
-                    if len(res_snippet) > 150:
-                        res_snippet = res_snippet[:150] + "..."
-                    f.write(f"- `{tc.get('name')}({tc.get('args', {})})` -> `{res_snippet}`\n")
-                f.write("\n")
+                    res_snippet = str(tc.get('result', ''))[:150].replace('\n', ' ')
+                    f.write(f"- `{tc.get('name')}({tc.get('args')})` → `{res_snippet}`\n")
+            f.write("\n")
     except Exception as e:
         print(f"Warning: Failed to log chat transcript to {log_path}: {str(e)}", file=sys.stderr)
 
-ensure_servitor_directories()
+def ensure_servitor_directories():
+    """Ensures nested directory layout for LSF."""
+    for path in [BASE_DIR, INBOX_DIR, LOGS_DIR, SERVITORS_DIR]:
+        path.mkdir(parents=True, exist_ok=True)
+    
+    # Transversals
+    transversals = ["zyzyx", "fuji-san", "motoko", "phileas", "gurgeh", "hetszunya"]
+    for t in transversals:
+        t_dir = SERVITORS_DIR / t
+        (t_dir / "knowledge").mkdir(parents=True, exist_ok=True)
+        (t_dir / "workspace").mkdir(parents=True, exist_ok=True)
 
-# --- CONTEXT INGESTION ENGINE ---
+    # Kronos (Tier 0)
+    kronos_dir = SERVITORS_DIR / "kronos"
+    (kronos_dir / "knowledge").mkdir(parents=True, exist_ok=True)
+    (kronos_dir / "workspace").mkdir(parents=True, exist_ok=True)
+    (kronos_dir / "common").mkdir(parents=True, exist_ok=True)
+
+    # Tier 1 & Tier 2
+    archons = {
+        "daedalus": ["stallman", "dijkstra", "flatline", "tesla", "turing"],
+        "splinter": ["usagi", "kerecsen", "kitsune", "fenrir", "paracelsus"],
+        "orpheus": ["vinci", "chapman", "silverhand", "flynn"],
+        "morpheus": ["aurelius", "kampo", "eldred"],
+        "lindbergh": ["takumi", "wash", "nemo"],
+    }
+    for a, sub_list in archons.items():
+        a_dir = kronos_dir / a
+        (a_dir / "knowledge").mkdir(parents=True, exist_ok=True)
+        (a_dir / "workspace").mkdir(parents=True, exist_ok=True)
+        (a_dir / "common").mkdir(parents=True, exist_ok=True)
+        for s in sub_list:
+            s_dir = a_dir / s
+            (s_dir / "knowledge").mkdir(parents=True, exist_ok=True)
+            (s_dir / "workspace").mkdir(parents=True, exist_ok=True)
+
+ensure_servitor_directories()
 
 # --- USAGE TELEMETRY & QUOTA METRIC ENGINE ---
 TELEMETRY_FILE = LOGS_DIR / "usage_telemetry.json"
@@ -591,11 +639,14 @@ def load_usage_telemetry() -> Dict[str, Any]:
                 if isinstance(data, dict):
                     if "daily_limit" not in data:
                         data["daily_limit"] = DEFAULT_DAILY_TOKEN_LIMIT
+                    if "daily_request_limit" not in data:
+                        data["daily_request_limit"] = DEFAULT_DAILY_REQUEST_LIMIT
                     return data
         except Exception:
             pass
     return {
         "daily_limit": DEFAULT_DAILY_TOKEN_LIMIT,
+        "daily_request_limit": DEFAULT_DAILY_REQUEST_LIMIT,
         "total_prompt_tokens": 0,
         "total_candidates_tokens": 0,
         "total_tokens": 0,
@@ -621,13 +672,11 @@ def record_token_usage(servitor_name: str, prompt_tokens: int, candidates_tokens
 
     turn_total = prompt_tokens + candidates_tokens
 
-    # Update overall totals
     data["total_prompt_tokens"] = data.get("total_prompt_tokens", 0) + prompt_tokens
     data["total_candidates_tokens"] = data.get("total_candidates_tokens", 0) + candidates_tokens
     data["total_tokens"] = data.get("total_tokens", 0) + turn_total
     data["total_api_calls"] = data.get("total_api_calls", 0) + 1
 
-    # Update daily tracking
     if "daily" not in data or not isinstance(data["daily"], dict):
         data["daily"] = {}
     if today not in data["daily"]:
@@ -638,7 +687,6 @@ def record_token_usage(servitor_name: str, prompt_tokens: int, candidates_tokens
     data["daily"][today]["total_tokens"] += turn_total
     data["daily"][today]["api_calls"] += 1
 
-    # Update per-servitor tracking
     if "servitors" not in data or not isinstance(data["servitors"], dict):
         data["servitors"] = {}
     if s_name not in data["servitors"]:
@@ -670,19 +718,25 @@ def get_usage_summary() -> Dict[str, Any]:
     today = time.strftime("%Y-%m-%d")
     data = load_usage_telemetry()
     daily_limit = data.get("daily_limit", DEFAULT_DAILY_TOKEN_LIMIT)
+    req_limit = data.get("daily_request_limit", DEFAULT_DAILY_REQUEST_LIMIT)
     today_stats = data.get("daily", {}).get(today, {"prompt_tokens": 0, "candidates_tokens": 0, "total_tokens": 0, "api_calls": 0})
 
     today_tokens = today_stats.get("total_tokens", 0)
+    today_reqs = today_stats.get("api_calls", 0)
+    
     pct = (today_tokens / daily_limit * 100.0) if daily_limit > 0 else 0.0
+    req_pct = (today_reqs / req_limit * 100.0) if req_limit > 0 else 0.0
 
     return {
         "today_date": today,
         "today_prompt_tokens": today_stats.get("prompt_tokens", 0),
         "today_candidates_tokens": today_stats.get("candidates_tokens", 0),
         "today_total_tokens": today_tokens,
-        "today_api_calls": today_stats.get("api_calls", 0),
+        "today_api_calls": today_reqs,
         "daily_limit": daily_limit,
+        "daily_request_limit": req_limit,
         "daily_usage_pct": round(pct, 2),
+        "daily_req_pct": round(req_pct, 2),
         "total_tokens_all_time": data.get("total_tokens", 0),
         "total_api_calls_all_time": data.get("total_api_calls", 0),
         "servitors": data.get("servitors", {})
@@ -705,6 +759,7 @@ def display_usage_report(reset: bool = False, set_limit: Optional[int] = None):
     summary = get_usage_summary()
 
     pct = summary["daily_usage_pct"]
+    req_pct = summary["daily_req_pct"]
     bar_width = 25
     filled = int(round((pct / 100.0) * bar_width))
     filled = min(bar_width, max(0, filled))
@@ -712,15 +767,13 @@ def display_usage_report(reset: bool = False, set_limit: Optional[int] = None):
 
     if RICH_AVAILABLE:
         console = Console()
-        req_pct = (summary['today_api_calls'] / FREE_TIER_DAILY_REQUEST_LIMIT * 100.0)
         report_text = (
-            f"[bold cyan]📊 SERVITOR CLI USAGE TELEMETRY & QUOTA REPORT (GEMINI FREE TIER)[/bold cyan]\n"
+            f"[bold cyan]📊 LSF CLI USAGE TELEMETRY & FREE TIER QUOTA REPORT[/bold cyan]\n"
             f"[bold yellow]Date:[/bold yellow] {summary['today_date']}\n"
-            f"[bold yellow]Free Tier Requests:[/bold yellow] {summary['today_api_calls']:,} / {FREE_TIER_DAILY_REQUEST_LIMIT:,} RPD ([bold magenta]{req_pct:.1f}%[/bold magenta])\n"
             f"[bold yellow]Daily Token Progress:[/bold yellow] [[bold green]{bar}[/bold green]] [bold magenta]{pct:.2f}%[/bold magenta]\n"
             f"[bold yellow]Daily Tokens Used:[/bold yellow]    {summary['today_total_tokens']:,} / {summary['daily_limit']:,} tokens\n"
-            f"[bold yellow]All-Time Telemetry:[/bold yellow]   {summary['total_tokens_all_time']:,} tokens ({summary['total_api_calls_all_time']:,} total requests)\n"
-            f"[dim cyan]Default Free Tier Quotas: 1,500 RPD | 15 RPM | 1,000,000 TPM[/dim cyan]\n\n"
+            f"[bold yellow]Free Tier Requests:[/bold yellow]   {summary['today_api_calls']:,} / {summary['daily_request_limit']:,} RPD ({req_pct:.1f}%)\n"
+            f"[bold yellow]All-Time Tokens:[/bold yellow]      {summary['total_tokens_all_time']:,} tokens ({summary['total_api_calls_all_time']:,} requests)\n\n"
             f"[bold white]Breakdown by Servitor:[/bold white]\n"
         )
         if summary["servitors"]:
@@ -730,63 +783,78 @@ def display_usage_report(reset: bool = False, set_limit: Optional[int] = None):
         else:
             report_text += "  [dim](No per-servitor telemetry recorded yet)[/dim]\n"
 
-        console.print(Panel(report_text, title="Usage Telemetry", border_style="cyan"))
+        console.print(Panel(report_text, title="LSF Quota Telemetry", border_style="cyan"))
     else:
         print("\n" + "="*60)
-        print("          SERVITOR CLI USAGE TELEMETRY REPORT")
+        print("      LSF CLI USAGE TELEMETRY & QUOTA REPORT")
         print("="*60)
         print(f"Date:                {summary['today_date']}")
         print(f"Daily Usage Gauge:   [{bar}] {pct:.2f}%")
         print(f"Today Tokens Used:   {summary['today_total_tokens']:,} / {summary['daily_limit']:,} tokens")
-        print(f"Today API Calls:     {summary['today_api_calls']:,} requests")
+        print(f"Free Tier Requests:  {summary['today_api_calls']:,} / {summary['daily_request_limit']:,} RPD ({req_pct:.1f}%)")
         print(f"All-Time Tokens:     {summary['total_tokens_all_time']:,} tokens ({summary['total_api_calls_all_time']:,} requests)")
         print("\nBreakdown by Servitor:")
         for s_k, s_v in summary["servitors"].items():
             print(f"  • {s_k.upper():<12} : {s_v['total_tokens']:,} tokens ({s_v['api_calls']} calls)")
         print("="*60 + "\n")
 
-
+# --- CONTEXT INGESTION ENGINE ---
 def load_servitor_context(servitor_name: str, context_dir: Optional[Path] = None, history_file: Optional[Path] = None) -> str:
     """
-    Reads knowledge base files from:
-      1. Shared Common Knowledge directories (~/.lsf/common-knowledge/ & ~/.lsf/knowledge/common/)
-      2. Servitor-Specific Knowledge directory (~/.lsf/knowledge/<servitor_name>/)
-      3. Exported Chat Log / History File (if provided)
-    Compiling all into a unified system directive context block.
+    Reads knowledge base files using hierarchical inheritance:
+      1. Kronos Root Common Knowledge (~/.lsf/servitors/kronos/common/)
+      2. Archon Common Knowledge (~/.lsf/servitors/kronos/<archon>/common/)
+      3. Servitor Specific Knowledge (~/.lsf/servitors/.../<servitor>/knowledge/)
+      4. Exported Chat Log / History File (if provided)
     """
+    s_name = resolve_servitor_name(servitor_name)
+    s_dir = get_servitor_dir(s_name)
     context_blocks = []
-    name = resolve_servitor_name(servitor_name)
+    ingested_file_names = set()
 
-    # 1. Ingest Shared Common Knowledge Base Files
-    common_dirs = [COMMON_KNOWLEDGE_DIR, ALT_COMMON_KNOWLEDGE_DIR]
-    ingested_common_files = set()
-    for c_dir in common_dirs:
-        if c_dir.exists():
-            c_files = sorted(c_dir.glob("*.md")) + sorted(c_dir.glob("*.txt"))
-            for file_path in c_files:
-                if file_path.name in ingested_common_files:
-                    continue
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        content = f.read()
-                        context_blocks.append(f"--- COMMON KNOWLEDGE BASE SOURCE: {file_path.name} ---\n{content}\n")
-                        ingested_common_files.add(file_path.name)
-                except Exception as e:
-                    print(f"Warning: Failed to read common knowledge file '{file_path}': {str(e)}", file=sys.stderr)
-
-    # 2. Ingest Servitor-Specific Knowledge Directory
-    s_k_dir = context_dir if context_dir else (KNOWLEDGE_DIR / name)
-    if s_k_dir and s_k_dir.exists():
-        md_files = sorted(s_k_dir.glob("*.md")) + sorted(s_k_dir.glob("*.txt"))
-        for file_path in md_files:
+    # 1. Kronos Root Common Knowledge
+    kronos_common = SERVITORS_DIR / "kronos" / "common"
+    if kronos_common.exists():
+        for file_path in sorted(kronos_common.glob("*.md")) + sorted(kronos_common.glob("*.txt")):
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                    context_blocks.append(f"--- SERVITOR SPECIFIC KNOWLEDGE ({name}): {file_path.name} ---\n{content}\n")
+                    context_blocks.append(f"--- KRONOS COMMON KNOWLEDGE: {file_path.name} ---\n{content}\n")
+                    ingested_file_names.add(file_path.name)
             except Exception as e:
-                print(f"Warning: Failed to read context file '{file_path}': {str(e)}", file=sys.stderr)
+                print(f"Warning: Failed to read common file: {str(e)}", file=sys.stderr)
 
-    # 2. Ingest Historical Chat Transcript File
+    # 2. Archon Common Knowledge (if applicable)
+    profile = SERVITOR_PROFILES.get(s_name, {})
+    parent_archon = profile.get("parent")
+    if parent_archon:
+        archon_dir = SERVITORS_DIR / "kronos" / parent_archon
+        archon_common = archon_dir / "common"
+        if archon_common.exists():
+            for file_path in sorted(archon_common.glob("*.md")) + sorted(archon_common.glob("*.txt")):
+                if file_path.name not in ingested_file_names:
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            content = f.read()
+                            context_blocks.append(f"--- {parent_archon.upper()} ARCHON COMMON KNOWLEDGE: {file_path.name} ---\n{content}\n")
+                            ingested_file_names.add(file_path.name)
+                    except Exception as e:
+                        print(f"Warning: Failed to read archon file: {str(e)}", file=sys.stderr)
+
+    # 3. Servitor Specific Knowledge
+    s_k_dir = context_dir if context_dir else (s_dir / "knowledge")
+    if s_k_dir and s_k_dir.exists():
+        for file_path in sorted(s_k_dir.glob("*.md")) + sorted(s_k_dir.glob("*.txt")):
+            if file_path.name not in ingested_file_names:
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                        context_blocks.append(f"--- {s_name.upper()} SPECIFIC KNOWLEDGE: {file_path.name} ---\n{content}\n")
+                        ingested_file_names.add(file_path.name)
+                except Exception as e:
+                    print(f"Warning: Failed to read specific file: {str(e)}", file=sys.stderr)
+
+    # 4. History File
     if history_file:
         hist_path = Path(history_file).expanduser().resolve()
         if hist_path.exists():
@@ -795,12 +863,12 @@ def load_servitor_context(servitor_name: str, context_dir: Optional[Path] = None
                     content = f.read()
                     context_blocks.append(f"--- EXPORTED CHAT LOG ({hist_path.name}) ---\n{content}\n")
             except Exception as e:
-                print(f"Warning: Failed to read history file '{hist_path}': {str(e)}", file=sys.stderr)
+                print(f"Warning: Failed to read history file: {str(e)}", file=sys.stderr)
 
     if not context_blocks:
         return ""
 
-    header = f"\n\n=== INGESTED CONTEXT FOR SERVITOR [{name.upper()}] ===\n"
+    header = f"\n\n=== INGESTED CONTEXT FOR SERVITOR [{s_name.upper()}] ===\n"
     footer = "=====================================================\n"
     return header + "\n".join(context_blocks) + footer
 
@@ -809,7 +877,7 @@ def read_file(filepath: str, servitor_name: str = "turing") -> str:
     """Reads content from a local file path inside the servitor workspace or host filesystem."""
     try:
         s_name = resolve_servitor_name(servitor_name)
-        s_ws = WORKSPACE_DIR / s_name
+        s_ws = get_servitor_workspace(s_name)
         path = Path(filepath).expanduser()
         if not path.is_absolute():
             path = (s_ws / path).resolve()
@@ -827,7 +895,7 @@ def write_file(filepath: str, content: str, servitor_name: str = "turing") -> st
     """Writes content to a specified file inside the servitor's workspace."""
     try:
         s_name = resolve_servitor_name(servitor_name)
-        s_ws = WORKSPACE_DIR / s_name
+        s_ws = get_servitor_workspace(s_name)
         path = Path(filepath).expanduser()
         if not path.is_absolute():
             path = (s_ws / path).resolve()
@@ -845,7 +913,7 @@ def execute_posix_cmd(command: str, servitor_name: str = "turing") -> str:
     """Executes a POSIX bash command inside the servitor's isolated workspace directory."""
     try:
         s_name = resolve_servitor_name(servitor_name)
-        s_ws = WORKSPACE_DIR / s_name
+        s_ws = get_servitor_workspace(s_name)
         s_ws.mkdir(parents=True, exist_ok=True)
         result = subprocess.run(
             command,
@@ -912,13 +980,12 @@ def inspect_local_media(filepath: str, prompt: str) -> str:
         print(f"📷 [MULTIMODAL INGEST] Uploading '{path.name}' to Gemini File API...")
         uploaded_file = client.files.upload(file=path)
         
-        # Poll state if video
         while uploaded_file.state.name == "PROCESSING":
             time.sleep(2)
             uploaded_file = client.files.get(name=uploaded_file.name)
             
         if uploaded_file.state.name == "FAILED":
-            return f"Error: Media processing failed on Gemini API."
+            return "Error: Media processing failed on Gemini API."
             
         response = client.models.generate_content(
             model="gemini-2.0-flash",
@@ -928,18 +995,27 @@ def inspect_local_media(filepath: str, prompt: str) -> str:
     except Exception as e:
         return f"Error inspecting media: {str(e)}"
 
-
 def web_search(query: str) -> str:
-    """Performs a web search across search engines and returns top matching results with titles, URLs, and text snippets."""
+    """Searches the web for a query using DuckDuckGo HTML scraping and returns top links with snippets."""
+    import urllib.request
+    import urllib.parse
+    import html
+    import re
+
     try:
-        q_enc = urllib.parse.quote(query)
-        target_url = "https://html.duckduckgo.com/html/?q=" + q_enc
-        req = urllib.request.Request(target_url, headers={"User-Agent": "Mozilla/5.0"})
+        q_enc = urllib.parse.quote_plus(query)
+        target_url = f"https://html.duckduckgo.com/html/?q={q_enc}"
+        req = urllib.request.Request(
+            target_url,
+            headers={'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        )
         with urllib.request.urlopen(req, timeout=12) as resp:
-            html_content = resp.read().decode("utf-8", errors="ignore")
+            html_content = resp.read().decode('utf-8', errors='ignore')
+        
         links = re.findall(r'<a class="result__url" href="([^"]+)".*?>(.*?)</a>', html_content, re.DOTALL)
-        snippets = re.findall(r'<a class="result__snippet[^"]*"[^>]*>(.*?)</a>', html_content, re.DOTALL)
-        titles = re.findall(r'<a class="result__a"[^>]*>(.*?)</a>', html_content, re.DOTALL)
+        snippets = re.findall(r'<a class="result__snippet[^"]*"[^"]*"[^"]*>(.*?)</a>', html_content, re.DOTALL)
+        titles = re.findall(r'<a class="result__a"[^"]*>(.*?)</a>', html_content, re.DOTALL)
+        
         results = []
         for i in range(min(len(titles), 6)):
             t = re.sub(r'<[^>]+>', '', titles[i]).strip()
@@ -950,7 +1026,8 @@ def web_search(query: str) -> str:
                 u = re.sub(r'<[^>]+>', '', raw_url).strip()
             s = re.sub(r'<[^>]+>', '', snippets[i] if i < len(snippets) else '').strip()
             if t and u:
-                results.append(f"{i+1}. [{unescape(t)}]({u})\n   Snippet: {unescape(s)}")
+                results.append(f"{i+1}. [{html.unescape(t)}]({u})\n   Snippet: {html.unescape(s)}")
+        
         if results:
             return f"WEB SEARCH RESULTS FOR '{query}':\n\n" + "\n\n".join(results)
         else:
@@ -959,24 +1036,28 @@ def web_search(query: str) -> str:
         return f"Error executing web search for '{query}': {str(e)}"
 
 def web_browse(url: str) -> str:
-    """Fetches the main readable text content of a web page given its URL."""
+    """Fetches the readable text content of a web URL."""
+    import urllib.request
+    import re
+    import html
+
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            html_content = resp.read().decode("utf-8", errors="ignore")
-        text = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-        text = re.sub(r'<[^>]+>', ' ', text)
-        text = unescape(text)
-        lines_list = [l.strip() for l in text.splitlines() if l.strip()]
-        clean_text = "\n".join(lines_list)
-        if len(clean_text) > 4000:
-            clean_text = clean_text[:4000] + "\n\n[... content truncated for token budget ...]"
-        return f"WEB PAGE CONTENT ({url}):\n\n{clean_text}"
+        req = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html_text = resp.read().decode('utf-8', errors='ignore')
+
+        body_text = re.sub(r'<(script|style).*?>.*?</\1>', '', html_text, flags=re.DOTALL | re.IGNORECASE)
+        clean_text = re.sub(r'<[^>]+>', ' ', body_text)
+        lines = [html.unescape(line.strip()) for line in clean_text.splitlines() if line.strip()]
+        page_content = "\n".join(lines[:120]) # Limit to top 120 lines
+        return f"PAGE CONTENT FROM [{url}]:\n\n{page_content[:3000]}"
     except Exception as e:
         return f"Error fetching URL '{url}': {str(e)}"
 
 TOOL_FUNCTIONS = [read_file, write_file, execute_posix_cmd, delegate_task, inspect_local_media, web_search, web_browse]
-
 
 # --- AGENT ENGINE LOOP ---
 def run_agent_loop(
@@ -1000,13 +1081,10 @@ def run_agent_loop(
         print(f"Unknown servitor profile: '{servitor_name}'", file=sys.stderr)
         sys.exit(1)
 
-    # Ensure workspace directory exists
-    s_ws = WORKSPACE_DIR / s_name
-    s_ws.mkdir(parents=True, exist_ok=True)
+    s_ws = get_servitor_workspace(s_name)
 
     client = genai.Client(api_key=api_key)
 
-    # Load Context Data
     context_block = load_servitor_context(s_name, context_dir=context_dir, history_file=history_file)
     system_instruction = profile["directive"]
     if context_block:
@@ -1036,16 +1114,12 @@ def run_agent_loop(
             )
         )
 
-        p_tokens = 0
-        c_tokens = 0
+        # Record Token Telemetry
         if hasattr(response, "usage_metadata") and response.usage_metadata:
-            p_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
-            c_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
-        if p_tokens == 0 and c_tokens == 0:
-            p_tokens = max(10, len(str(contents)) // 4)
-            c_tokens = max(10, len(str(getattr(response, "text", "") or "")) // 4)
-
-        u_info = record_token_usage(s_name, p_tokens, c_tokens)
+            p_tok = response.usage_metadata.prompt_token_count or 0
+            c_tok = response.usage_metadata.candidates_token_count or 0
+            use_stats = record_token_usage(s_name, p_tok, c_tok)
+            print(f"📊 [Turn Tokens: {p_tok} prompt + {c_tok} output | Daily Usage: {use_stats['daily_usage_pct']}%]")
 
         if response.candidates and response.candidates[0].content:
             contents.append(response.candidates[0].content)
@@ -1054,8 +1128,7 @@ def run_agent_loop(
         if not function_calls:
             print(f"\n[{profile['name'].upper()} TELEMETRY OUTPUT]:\n")
             print(response.text)
-            append_to_chat_log(chat_log_file, profile['name'], response.text, tool_calls=executed_tools_log)
-            print(f"\n📊 [Turn Tokens: {u_info['turn_prompt_tokens']} prompt + {u_info['turn_candidates_tokens']} output = {u_info['turn_total_tokens']} total | Daily Usage: {u_info['today_total_tokens']:,}/{u_info['daily_limit']:,} ({u_info['daily_usage_pct']}%)]")
+            append_to_chat_log(chat_log_file, profile['name'], response.text or "", tool_calls=executed_tools_log)
             break
 
         for fc in function_calls:
@@ -1104,7 +1177,7 @@ def run_daemon(
     """Runs a background listener daemon for a specific servitor polling its inbox."""
     s_name = resolve_servitor_name(servitor_name)
     inbox_file = INBOX_DIR / f"{s_name}.json"
-    print(f"🔄 [{s_name.upper()} DAEMON ACTIVE v5.0] Listening on {inbox_file} (poll interval: {interval}s)...")
+    print(f"🔄 [{s_name.upper()} DAEMON ACTIVE LSF CLI] Listening on {inbox_file} (poll interval: {interval}s)...")
 
     while True:
         if inbox_file.exists():
@@ -1138,7 +1211,7 @@ def run_daemon(
 def list_pantheon_hierarchy():
     """Prints the Cyber-Táltos Servitor Pantheon in a structured hierarchical format."""
     print("\n" + "="*70)
-    print("      CYBER-TÁLTOS SERVITOR PANTHEON HIERARCHY & ROSTER")
+    print("      LLM SERVITOR FRAMEWORK (LSF) PANTHEON HIERARCHY & ROSTER")
     print("="*70 + "\n")
 
     for section in PANTHEON_STRUCTURE:
@@ -1158,16 +1231,16 @@ def list_pantheon_hierarchy():
             print(f"{indent}{prefix}• {s_info['name']:<12} | {s_info['type']:<22} | {s_info['role']}")
 
     print("\n" + "-"*70)
-    print(f"Directory Structure:")
-    print(f" • Inbox Queue:     {INBOX_DIR}")
+    print("LSF Hierarchical Directory Structure (~/.lsf/servitors/):")
+    print(f" • Root Inbox:       {INBOX_DIR}")
     print(f" • Logs Directory:  {LOGS_DIR}")
-    print(f" • Common Knowledge: {COMMON_KNOWLEDGE_DIR} (and {ALT_COMMON_KNOWLEDGE_DIR})")
-    print(f" • Servitor Knowledge:{KNOWLEDGE_DIR}/<servitor_name>/")
-    print(f" • Workspaces:      {WORKSPACE_DIR}/<servitor_name>/")
+    print(f" • Transversals:     {SERVITORS_DIR}/<transversal>/ (knowledge/, workspace/)")
+    print(f" • Tier 0 Kronos:   {SERVITORS_DIR}/kronos/ (knowledge/, workspace/, common/)")
+    print(f" • Tier 1 Archons:  {SERVITORS_DIR}/kronos/<archon>/ (knowledge/, workspace/, common/)")
+    print(f" • Tier 2 Servitors:{SERVITORS_DIR}/kronos/<archon>/<servitor>/ (knowledge/, workspace/)")
     print("="*70 + "\n")
 
-
-# --- INTERACTIVE CLI UI ENGINE (v10.0) ---
+# --- INTERACTIVE TERMINAL UI MODE ---
 def run_interactive_mode(
     servitor_name: str = "turing",
     model_name: str = "gemini-2.0-flash",
@@ -1175,11 +1248,7 @@ def run_interactive_mode(
     history_file: Optional[Path] = None,
     always_page: bool = False
 ):
-    """
-    Launches an interactive Terminal UI (CLI REPL) with scrollable response paging,
-    slash commands (/switch, /model, /clear, /page, /history, /help, /exit),
-    rich markdown rendering, and persistent multi-turn conversation state.
-    """
+    """Launches interactive Terminal UI (REPL) with scrollable response paging and slash commands."""
     if not RICH_AVAILABLE:
         print("Error: `rich` and `prompt_toolkit` packages are required for interactive mode.", file=sys.stderr)
         print("Install via: pip install rich prompt_toolkit", file=sys.stderr)
@@ -1201,11 +1270,9 @@ def run_interactive_mode(
 
     client = genai.Client(api_key=api_key)
 
-    # Initialize prompt history file
     prompt_history_path = LOGS_DIR / ".prompt_history"
     session = PromptSession(history=FileHistory(str(prompt_history_path)))
 
-    # Session chat log & conversation state
     session_id = time.strftime("%Y-%m-%d_%H-%M-%S")
     current_chat_log = get_chat_log_path(current_servitor, session_id)
     contents: List[Any] = []
@@ -1223,28 +1290,29 @@ def run_interactive_mode(
 
     def print_welcome_header(s_name: str, m_name: str):
         profile = SERVITOR_PROFILES[s_name]
-        s_ws = WORKSPACE_DIR / s_name
-        s_ws.mkdir(parents=True, exist_ok=True)
+        s_ws = get_servitor_workspace(s_name)
+        use_summary = get_usage_summary()
 
         header_text = (
-            f"[bold cyan]CYBER-TÁLTOS INTERACTIVE TERMINAL UI (v10.0)[/bold cyan]\n"
+            f"[bold cyan]LLM SERVITOR FRAMEWORK (LSF CLI v10.0)[/bold cyan]\n"
             f"[bold yellow]Active Servitor:[/bold yellow] [bold green]{profile['name'].upper()}[/bold green] ({profile['role']})\n"
             f"[bold yellow]Parent Tier/Archon:[/bold yellow] Tier {profile.get('tier', 'Task')} ({profile.get('parent', profile.get('category', 'Core'))})\n"
             f"[bold yellow]Target Model:[/bold yellow] [bold magenta]{m_name}[/bold magenta]\n"
             f"[bold yellow]Workspace CWD:[/bold yellow] [dim]{s_ws}[/dim]\n"
             f"[bold yellow]Chat Log Path:[/bold yellow] [dim]{current_chat_log}[/dim]\n"
-            f"[bold yellow]Daily Usage:[/bold yellow] [bold magenta]{get_usage_summary()['daily_usage_pct']:.2f}%[/bold magenta] ({get_usage_summary()['today_total_tokens']:,} / {get_usage_summary()['daily_limit']:,} tokens)\n"
-            f"[bold yellow]Common Knowledge:[/bold yellow] [dim]{COMMON_KNOWLEDGE_DIR}[/dim]\n\n"
+            f"[bold yellow]Free Tier Usage:[/bold yellow] [bold magenta]{use_summary['daily_usage_pct']:.2f}%[/bold magenta] ({use_summary['today_total_tokens']:,} tokens | {use_summary['today_api_calls']}/1500 RPD)\n\n"
             f"[bold white]Slash Commands:[/bold white]\n"
             f"  [cyan]/switch <servitor>[/cyan]  - Switch active servitor identity\n"
             f"  [cyan]/model <model>[/cyan]     - Switch LLM model (e.g. gemini-2.0-flash, gemini-1.5-pro)\n"
+            f"  [cyan]/web <query>[/cyan]       - Search web directly from CLI\n"
+            f"  [cyan]/usage[/cyan]             - View current usage percentage & quota report\n"
             f"  [cyan]/clear[/cyan]             - Reset conversation history\n"
             f"  [cyan]/page[/cyan]              - Open last response in scrollable terminal pager (`less -R`)\n"
             f"  [cyan]/history[/cyan]           - Show turn count & conversation status\n"
             f"  [cyan]/help[/cyan]              - Display command help\n"
             f"  [cyan]/exit[/cyan]              - Quit interactive session"
         )
-        console.print(Panel(header_text, title=f"⚡ SERVITOR CLI SESSION — {profile['name'].upper()}", border_style="cyan"))
+        console.print(Panel(header_text, title=f"⚡ LSF SESSION — {profile['name'].upper()}", border_style="cyan"))
 
     print_welcome_header(current_servitor, current_model)
 
@@ -1277,22 +1345,34 @@ def run_interactive_mode(
                 arg = cmd_parts[1].strip() if len(cmd_parts) > 1 else ""
 
                 if cmd in ["/exit", "/quit", "/q"]:
-                    console.print("[bold cyan]Exiting servitor session. Standby for next initialization.[/bold cyan]")
+                    console.print("[bold cyan]Exiting LSF session. Standby for next initialization.[/bold cyan]")
                     break
 
                 elif cmd in ["/help", "/h"]:
                     help_msg = (
                         "[bold cyan]Interactive Terminal Slash Commands:[/bold cyan]\n"
-                        "  [bold yellow]/switch <name>[/bold yellow]   : Change active servitor profile (e.g. /switch stallman, /switch flynn)\n"
+                        "  [bold yellow]/switch <name>[/bold yellow]   : Change active servitor profile (e.g. /switch stallman, /switch dijkstra)\n"
                         "  [bold yellow]/model <model>[/bold yellow]   : Change target model (e.g. /model gemini-1.5-pro)\n"
+                        "  [bold yellow]/web <query>[/bold yellow]     : Execute web search\n"
+                        "  [bold yellow]/usage[/bold yellow]           : Display current usage percentage & quota report\n"
                         "  [bold yellow]/clear[/bold yellow]           : Clear current session history\n"
                         "  [bold yellow]/page[/bold yellow]            : Open last response in scrollable full-screen pager (`less -R`)\n"
-                        "  [bold yellow]/usage[/bold yellow]           : Display detailed token consumption & current daily usage percentage\n"
-                        "  [bold yellow]/limit <N>[/bold yellow]       : Update daily token budget limit (e.g. /limit 2000000)\n"
                         "  [bold yellow]/history[/bold yellow]         : Display conversation turns and current message stack\n"
                         "  [bold yellow]/exit[/bold yellow]            : Exit interactive mode"
                     )
                     console.print(Panel(help_msg, title="Command Reference", border_style="yellow"))
+                    continue
+
+                elif cmd in ["/usage", "/quota", "/stats"]:
+                    display_usage_report()
+                    continue
+
+                elif cmd in ["/web", "/search"]:
+                    if not arg:
+                        console.print("[bold red]Usage: /web <search query>[/bold red]")
+                        continue
+                    res = web_search(arg)
+                    console.print(Panel(res, title=f"Web Search: {arg}", border_style="blue"))
                     continue
 
                 elif cmd in ["/switch", "/servitor"]:
@@ -1306,6 +1386,7 @@ def run_interactive_mode(
                     current_servitor = target
                     system_instruction = load_current_system_directive(current_servitor)
                     contents = []
+                    current_chat_log = get_chat_log_path(current_servitor, session_id)
                     console.print(f"[bold green]Switched active servitor to: {SERVITOR_PROFILES[current_servitor]['name'].upper()}[/bold green]")
                     print_welcome_header(current_servitor, current_model)
                     continue
@@ -1322,18 +1403,6 @@ def run_interactive_mode(
                     contents = []
                     last_response_text = ""
                     console.print("[bold yellow]Conversation history cleared.[/bold yellow]")
-                    continue
-
-                elif cmd in ["/usage", "/stats", "/quota"]:
-                    display_usage_report()
-                    continue
-
-                elif cmd in ["/limit", "/set-limit"]:
-                    if not arg or not arg.isdigit():
-                        console.print("[bold red]Usage: /limit <number_of_tokens>[/bold red]")
-                        continue
-                    new_lim = int(arg)
-                    display_usage_report(set_limit=new_lim)
                     continue
 
                 elif cmd in ["/history"]:
@@ -1356,7 +1425,10 @@ def run_interactive_mode(
 
             # --- REGULAR PROMPT EXECUTION ---
             contents.append(user_input)
+            append_to_chat_log(current_chat_log, "USER", user_input)
             profile_name = SERVITOR_PROFILES[current_servitor]['name'].upper()
+
+            turn_executed_tools = []
 
             with console.status(f"[bold cyan][{profile_name}] Processing prompt via {current_model}...[/bold cyan]", spinner="dots"):
                 max_turns = 6
@@ -1377,16 +1449,10 @@ def run_interactive_mode(
                         console.print(f"[bold red]API Error:[/bold red] {str(e)}")
                         break
 
-                    p_tokens = 0
-                    c_tokens = 0
                     if hasattr(response, "usage_metadata") and response.usage_metadata:
-                        p_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
-                        c_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
-                    if p_tokens == 0 and c_tokens == 0:
-                        p_tokens = max(10, len(str(contents)) // 4)
-                        c_tokens = max(10, len(str(getattr(response, "text", "") or "")) // 4)
-
-                    u_info = record_token_usage(current_servitor, p_tokens, c_tokens)
+                        p_tok = response.usage_metadata.prompt_token_count or 0
+                        c_tok = response.usage_metadata.candidates_token_count or 0
+                        use_stats = record_token_usage(current_servitor, p_tok, c_tok)
 
                     if response.candidates and response.candidates[0].content:
                         contents.append(response.candidates[0].content)
@@ -1396,7 +1462,6 @@ def run_interactive_mode(
                         final_text = response.text or ""
                         break
 
-                    # Process Tool Calls
                     for fc in function_calls:
                         func_name = fc.name
                         func_args = dict(fc.args) if fc.args else {}
@@ -1425,6 +1490,7 @@ def run_interactive_mode(
 
                         res_snippet = tool_result[:120] + "..." if len(tool_result) > 120 else tool_result
                         console.print(f"   [dim]└─ Result: {res_snippet}[/dim]")
+                        turn_executed_tools.append({"name": func_name, "args": func_args, "result": tool_result})
 
                         contents.append(
                             types.Part.from_function_response(
@@ -1441,16 +1507,13 @@ def run_interactive_mode(
 
                 console.print(f"\n[bold green]━━━ [{profile_name} RESPONSE] ━━━[/bold green]\n")
 
-                # Scrollable Pager Logic: If always_page is set OR response exceeds screen height / 25 lines
                 if always_page or line_count > (term_height - 6):
                     console.print(f"[dim cyan](Response is {line_count} lines long. Displaying in scrollable terminal pager — press 'q' to return to prompt)[/dim cyan]\n")
                     with console.pager(styles=True):
                         console.print(Markdown(final_text))
                 else:
                     console.print(Markdown(final_text))
-                    console.print("\n[dim]Tip: Type /page anytime to open this response in full-screen scrollable mode.[/dim]")
-
-                console.print(f"[dim cyan]📊 Turn Tokens: {u_info['turn_prompt_tokens']} prompt + {u_info['turn_candidates_tokens']} output | Today: {u_info['today_total_tokens']:,} / {u_info['daily_limit']:,} tokens ([magenta]{u_info['daily_usage_pct']}%[/magenta])[/dim cyan]\n")
+                    console.print("\n[dim]Tip: Type /page anytime to open this response in full-screen scrollable mode.[/dim]\n")
 
         except (KeyboardInterrupt, EOFError):
             console.print("\n[bold yellow]Session interrupted. Exiting interactive mode.[/bold yellow]")
@@ -1459,13 +1522,10 @@ def run_interactive_mode(
 # --- CLI ENTRYPOINT ---
 def main():
     parser = argparse.ArgumentParser(
-        description="LSF CLI (LLM Servitor Framework) v10.0: Gemini Free Tier Quotas & Usage Telemetry Engine: Interactive Terminal UI & Cyber-Táltos Multi-Agent Engine"
+        description="LLM Servitor Framework CLI (LSF CLI v10.0): Interactive Terminal UI & Cyber-Táltos Multi-Agent Engine"
     )
     subparsers = parser.add_subparsers(dest="command", help="Operational Subcommands")
 
-    # Run command
-    
-    # Interactive UI command
     interactive_parser = subparsers.add_parser("interactive", aliases=["chat", "ui"], help="Launch interactive CLI UI terminal session")
     interactive_parser.add_argument("-s", "--servitor", default="turing", help="Initial servitor profile key")
     interactive_parser.add_argument("-m", "--model", default="gemini-2.0-flash", help="Gemini API model name")
@@ -1480,24 +1540,20 @@ def main():
     run_parser.add_argument("-c", "--context-dir", type=Path, default=None, help="Custom knowledge directory path")
     run_parser.add_argument("-f", "--history-file", type=Path, default=None, help="Exported chat transcript log path")
 
-    # Daemon command
     daemon_parser = subparsers.add_parser("daemon", help="Run inbox listener daemon for a servitor")
     daemon_parser.add_argument("-s", "--servitor", required=True, help="Target servitor key to poll")
     daemon_parser.add_argument("-i", "--interval", type=int, default=5, help="Poll interval in seconds")
     daemon_parser.add_argument("-c", "--context-dir", type=Path, default=None, help="Custom knowledge directory path")
     daemon_parser.add_argument("-f", "--history-file", type=Path, default=None, help="Exported chat transcript log path")
 
-    # Usage command
     usage_parser = subparsers.add_parser("usage", aliases=["stats", "quota"], help="Display current token usage percentage and quota report")
-    usage_parser.add_argument("--reset", action="store_true", help="Reset cumulative token usage logs")
+    usage_parser.add_argument("--reset", action="store_true", help="Reset token usage telemetry logs")
     usage_parser.add_argument("--set-limit", type=int, default=None, help="Set custom daily token budget limit")
 
-    # List command
     subparsers.add_parser("list", help="List configured servitor profiles showing full taxonomy hierarchy")
 
     args = parser.parse_args()
 
-    
     if args.command in ["interactive", "chat", "ui"]:
         run_interactive_mode(
             servitor_name=args.servitor,
@@ -1507,7 +1563,6 @@ def main():
             always_page=args.pager
         )
     elif args.command == "run":
-
         run_agent_loop(
             args.servitor,
             args.prompt,
@@ -1527,7 +1582,6 @@ def main():
     elif args.command == "list":
         list_pantheon_hierarchy()
     else:
-        # Default behavior when no subcommand is given: launch interactive session
         print("⚡ No subcommand specified. Launching interactive terminal session (turing)...")
         run_interactive_mode()
 
